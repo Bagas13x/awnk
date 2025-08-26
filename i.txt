@@ -1,0 +1,6 @@
+App.jsx?t=1756171643978:858 
+ Uncaught ReferenceError: CountdownTable is not defined
+    at App (App.jsx?t=1756171643978:858:11)
+App	@	App.jsx?t=1756171643978:858
+<App>		
+(anonymous)	@	main.jsx:8
