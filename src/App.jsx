@@ -67,10 +67,177 @@ function fmtCountdown(secs) {
   return `${d}h ${h}j ${m}m ${s}s`;
 }
 
-// ===================== STORAGE =====================
+// ===================== SUPABASE FUNCTIONS =====================
+async function fetchRentals() {
+  try {
+    const { data, error } = await supabase
+      .from('rentals')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Convert database format to app format
+    return data.map(rental => ({
+      id: rental.id,
+      nama: rental.nama,
+      jenis: rental.jenis,
+      gmail: rental.gmail || '',
+      harga: Number(rental.harga) || 0,
+      metode: rental.metode,
+      durasiDays: rental.durasi_days,
+      startISO: rental.start_iso,
+      status: rental.status,
+      tanggalMulai: rental.tanggal_mulai,
+      tanggalAkhir: rental.tanggal_akhir
+    }));
+  } catch (error) {
+    console.error('Error fetching rentals:', error);
+    return [];
+  }
+}
+
+async function addRentalToDB(rentalData) {
+  try {
+    const { data, error } = await supabase
+      .from('rentals')
+      .insert([{
+        nama: rentalData.nama,
+        jenis: rentalData.jenis,
+        gmail: rentalData.gmail || null,
+        harga: rentalData.harga,
+        metode: rentalData.metode,
+        durasi_days: rentalData.durasiDays,
+        start_iso: new Date().toISOString(),
+        status: 'Normal',
+        tanggal_mulai: rentalData.tanggalMulai || null,
+        tanggal_akhir: rentalData.tanggalAkhir || null
+      }])
+      .select();
+    
+    if (error) throw error;
+    return data[0];
+  } catch (error) {
+    console.error('Error adding rental:', error);
+    throw error;
+  }
+}
+
+async function updateRentalInDB(id, updates) {
+  try {
+    const dbUpdates = {};
+    
+    // Map app field names to database field names
+    if (updates.nama !== undefined) dbUpdates.nama = updates.nama;
+    if (updates.jenis !== undefined) dbUpdates.jenis = updates.jenis;
+    if (updates.gmail !== undefined) dbUpdates.gmail = updates.gmail;
+    if (updates.harga !== undefined) dbUpdates.harga = updates.harga;
+    if (updates.metode !== undefined) dbUpdates.metode = updates.metode;
+    if (updates.durasiDays !== undefined) dbUpdates.durasi_days = updates.durasiDays;
+    if (updates.status !== undefined) dbUpdates.status = updates.status;
+    if (updates.tanggalMulai !== undefined) dbUpdates.tanggal_mulai = updates.tanggalMulai;
+    if (updates.tanggalAkhir !== undefined) dbUpdates.tanggal_akhir = updates.tanggalAkhir;
+
+    const { data, error } = await supabase
+      .from('rentals')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select();
+    
+    if (error) throw error;
+    return data[0];
+  } catch (error) {
+    console.error('Error updating rental:', error);
+    throw error;
+  }
+}
+
+async function deleteRentalFromDB(id) {
+  try {
+    const { error } = await supabase
+      .from('rentals')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error deleting rental:', error);
+    throw error;
+  }
+}
+
+async function fetchInfos() {
+  try {
+    const { data: infos, error: infosError } = await supabase
+      .from('infos')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (infosError) throw infosError;
+
+    // Fetch chats for each info
+    const infosWithChats = await Promise.all(
+      infos.map(async (info) => {
+        const { data: chats, error: chatsError } = await supabase
+          .from('chats')
+          .select('*')
+          .eq('info_id', info.id)
+          .order('created_at', { ascending: true });
+        
+        if (chatsError) {
+          console.error('Error fetching chats:', chatsError);
+          return { ...info, chats: [] };
+        }
+        
+        return { ...info, chats: chats || [] };
+      })
+    );
+
+    return infosWithChats;
+  } catch (error) {
+    console.error('Error fetching infos:', error);
+    return [];
+  }
+}
+
+async function addInfoToDB(text) {
+  try {
+    const { data, error } = await supabase
+      .from('infos')
+      .insert([{
+        date: new Date().toLocaleString(),
+        text: text.trim()
+      }])
+      .select();
+    
+    if (error) throw error;
+    return { ...data[0], chats: [] };
+  } catch (error) {
+    console.error('Error adding info:', error);
+    throw error;
+  }
+}
+
+async function addChatToDB(infoId, text) {
+  try {
+    const { data, error } = await supabase
+      .from('chats')
+      .insert([{
+        info_id: infoId,
+        text: text.trim()
+      }])
+      .select();
+    
+    if (error) throw error;
+    return data[0];
+  } catch (error) {
+    console.error('Error adding chat:', error);
+    throw error;
+  }
+}
+
+// ===================== STORAGE (fallback for login status) =====================
 const LS_KEYS = {
-  RENTALS: "rental_dashboard_v2_rentals",
-  INFOS: "rental_dashboard_v2_infos",
   LOGGED_IN: "rental_dashboard_v2_logged_in",
 };
 
@@ -115,8 +282,6 @@ function StatusBadge({ status }) {
   const color = status === "Normal" ? "bg-green-100 text-green-700" : status === "Perbaikan" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700";
   return <span className={`px-2 py-1 rounded-full text-[11px] sm:text-xs font-medium ${color}`}>{status}</span>;
 }
-
-// Add these components to your App.jsx file, right before the export default function App() line
 
 // ===================== COUNTDOWN TABLE =====================
 function CountdownTable({ rentals, onChangeStatus, isLoggedIn }) {
@@ -190,9 +355,9 @@ function CountdownTable({ rentals, onChangeStatus, isLoggedIn }) {
 
 // ===================== TRANSACTIONS TABLE =====================
 function TransactionsTable({ rentals }) {
-  const [sortBy, setSortBy] = useState('date'); // 'date', 'amount', 'method'
-  const [sortOrder, setSortOrder] = useState('desc'); // 'asc', 'desc'
-  const [filterMethod, setFilterMethod] = useState('all'); // 'all', 'Tunai', 'Transfer'
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [filterMethod, setFilterMethod] = useState('all');
 
   const filteredAndSorted = useMemo(() => {
     let filtered = rentals.filter(r => 
@@ -330,7 +495,7 @@ function TransactionsTable({ rentals }) {
 }
 
 // ===================== ADMIN MANAGER =====================
-function AdminManager({ rentals, onUpdate, onDelete }) {
+function AdminManager({ rentals, onUpdate, onDelete, isLoading }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
@@ -341,7 +506,7 @@ function AdminManager({ rentals, onUpdate, onDelete }) {
       const matchesSearch = !searchTerm || 
         r.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.jenis.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.gmail.toLowerCase().includes(searchTerm.toLowerCase());
+        (r.gmail && r.gmail.toLowerCase().includes(searchTerm.toLowerCase()));
       
       const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
       
@@ -362,24 +527,28 @@ function AdminManager({ rentals, onUpdate, onDelete }) {
     });
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editForm.nama?.trim() || !editForm.jenis?.trim()) {
       alert('Nama dan jenis harus diisi!');
       return;
     }
 
-    onUpdate(editingId, {
-      nama: editForm.nama.trim(),
-      jenis: editForm.jenis.trim(),
-      gmail: editForm.gmail.trim(),
-      harga: Number(editForm.harga) || 0,
-      metode: editForm.metode,
-      durasiDays: Number(editForm.durasiDays) || 1,
-      status: editForm.status
-    });
-    
-    setEditingId(null);
-    setEditForm({});
+    try {
+      await onUpdate(editingId, {
+        nama: editForm.nama.trim(),
+        jenis: editForm.jenis.trim(),
+        gmail: editForm.gmail.trim(),
+        harga: Number(editForm.harga) || 0,
+        metode: editForm.metode,
+        durasiDays: Number(editForm.durasiDays) || 1,
+        status: editForm.status
+      });
+      
+      setEditingId(null);
+      setEditForm({});
+    } catch (error) {
+      alert('Gagal menyimpan perubahan: ' + error.message);
+    }
   }
 
   function cancelEdit() {
@@ -387,10 +556,18 @@ function AdminManager({ rentals, onUpdate, onDelete }) {
     setEditForm({});
   }
 
-  function handleDelete(id, nama) {
+  async function handleDelete(id, nama) {
     if (window.confirm(`Yakin ingin menghapus data "${nama}"?`)) {
-      onDelete(id);
+      try {
+        await onDelete(id);
+      } catch (error) {
+        alert('Gagal menghapus data: ' + error.message);
+      }
     }
+  }
+
+  if (isLoading) {
+    return <div className="text-center py-8">Memuat data...</div>;
   }
 
   return (
@@ -610,7 +787,6 @@ function LoginForm({ onLogin }) {
     <div className="space-y-4">
       <div className="text-center mb-6">
         <div className="text-lg font-semibold text-gray-800">Login Admin</div>
-        {/* <div className="text-sm text-gray-600 mt-1">Masuk admin untuk akses Awanku :c</div> */}
       </div>
       
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -657,16 +833,13 @@ function LoginForm({ onLogin }) {
 
 // ===================== FORM INPUTS =====================
 function Input({ label, value, onChange, type = "text", required = false, min, max, placeholder, ...rest }) {
-  // Only pass valid HTML attributes to the input element
   const validInputProps = {};
   
   if (min !== undefined) validInputProps.min = min;
   if (max !== undefined) validInputProps.max = max;
   if (placeholder !== undefined) validInputProps.placeholder = placeholder;
   
-  // Filter out any other custom props that shouldn't go to DOM
   Object.keys(rest).forEach(key => {
-    // Only allow standard HTML input attributes
     if (['id', 'name', 'disabled', 'readonly', 'maxLength', 'minLength', 'pattern', 'step', 'autoComplete', 'autoFocus'].includes(key)) {
       validInputProps[key] = rest[key];
     }
@@ -729,10 +902,9 @@ export default function App() {
   const [page, setPage] = useState("dashboard");
   const [isLoggedIn, setIsLoggedIn] = useState(loadLS(LS_KEYS.LOGGED_IN, false));
 
-  const [rentals, setRentals] = useState(loadLS(LS_KEYS.RENTALS, []));
-  const [infos, setInfos] = useState(loadLS(LS_KEYS.INFOS, []));
-
-  // NEW: toggle sidebar untuk mobile
+  const [rentals, setRentals] = useState([]);
+  const [infos, setInfos] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // live-tick to refresh countdown
@@ -743,23 +915,30 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
-  // persist - dengan error handling
+  // Initial data loading
   useEffect(() => {
-    try {
-      saveLS(LS_KEYS.RENTALS, rentals);
-    } catch (error) {
-      console.error('Error saving rentals:', error);
+    async function loadInitialData() {
+      setIsLoading(true);
+      try {
+        const [rentalsData, infosData] = await Promise.all([
+          fetchRentals(),
+          fetchInfos()
+        ]);
+        
+        setRentals(rentalsData);
+        setInfos(infosData);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+        alert('Gagal memuat data. Silakan refresh halaman.');
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }, [rentals]);
-  
-  useEffect(() => {
-    try {
-      saveLS(LS_KEYS.INFOS, infos);
-    } catch (error) {
-      console.error('Error saving infos:', error);
-    }
-  }, [infos]);
-  
+
+    loadInitialData();
+  }, []);
+
+  // persist login status
   useEffect(() => {
     try {
       saveLS(LS_KEYS.LOGGED_IN, isLoggedIn);
@@ -770,29 +949,46 @@ export default function App() {
 
   // auto-update status -> Waktu Habis
   useEffect(() => {
-    try {
-      setRentals((prev) => {
-        if (!Array.isArray(prev)) return [];
+    async function updateExpiredRentals() {
+      try {
+        const updates = [];
         
-        return prev.map((r) => {
-          if (!r || typeof r !== 'object') return r;
-          
-          try {
-            const left = secondsLeft(r.startISO, r.durasiDays);
-            if (left <= 0 && r.status !== "Waktu Habis") {
-              return { ...r, status: "Waktu Habis" };
+        rentals.forEach((r) => {
+          if (r && typeof r === 'object') {
+            try {
+              const left = secondsLeft(r.startISO, r.durasiDays);
+              if (left <= 0 && r.status !== "Waktu Habis") {
+                updates.push({ id: r.id, status: "Waktu Habis" });
+              }
+            } catch (error) {
+              console.error('Error checking rental expiry:', error, r);
             }
-            return r;
-          } catch (error) {
-            console.error('Error updating rental status:', error, r);
-            return r;
           }
         });
-      });
-    } catch (error) {
-      console.error('Error in auto-update effect:', error);
+
+        // Update expired rentals in batch
+        if (updates.length > 0) {
+          for (const update of updates) {
+            try {
+              await updateRentalInDB(update.id, { status: update.status });
+            } catch (error) {
+              console.error('Error updating expired rental:', error);
+            }
+          }
+          
+          // Refresh rentals data
+          const updatedRentals = await fetchRentals();
+          setRentals(updatedRentals);
+        }
+      } catch (error) {
+        console.error('Error in auto-update effect:', error);
+      }
     }
-  }, [tick]);
+
+    if (rentals.length > 0) {
+      updateExpiredRentals();
+    }
+  }, [tick]); // Run every second via tick
 
   const totals = useMemo(() => {
     try {
@@ -826,132 +1022,111 @@ export default function App() {
     }
   }, [rentals, tick]);
 
-  function addRental(data) {
+  async function addRental(data) {
     try {
       console.log('Adding rental with data:', data);
       
-      // Validasi input
       if (!data || !data.nama || !data.jenis) {
         console.error('Invalid rental data:', data);
         alert("Data tidak lengkap. Nama dan jenis wajib diisi.");
         return;
       }
 
-      const r = {
-        id: Date.now() + Math.random(), // Lebih unik
-        nama: String(data.nama || '').trim(),
-        jenis: String(data.jenis || '').trim(),
-        gmail: String(data.gmail || '').trim(),
-        harga: Number(data.harga) || 0,
-        metode: data.metode || "Tunai",
-        durasiDays: Number(data.durasiDays) || 7,
-        startISO: new Date().toISOString(),
-        status: "Normal",
-      };
+      // Add to database
+      const newRental = await addRentalToDB(data);
+      
+      // Update local state
+      setRentals(prevRentals => [
+        {
+          id: newRental.id,
+          nama: newRental.nama,
+          jenis: newRental.jenis,
+          gmail: newRental.gmail || '',
+          harga: Number(newRental.harga) || 0,
+          metode: newRental.metode,
+          durasiDays: newRental.durasi_days,
+          startISO: newRental.start_iso,
+          status: newRental.status,
+          tanggalMulai: newRental.tanggal_mulai,
+          tanggalAkhir: newRental.tanggal_akhir
+        },
+        ...prevRentals
+      ]);
 
-      console.log('Created rental object:', r);
-
-      // Update rentals dengan error handling
-      setRentals((prevRentals) => {
-        try {
-          const newRentals = Array.isArray(prevRentals) ? [r, ...prevRentals] : [r];
-          console.log('New rentals array:', newRentals);
-          return newRentals;
-        } catch (error) {
-          console.error('Error updating rentals:', error);
-          return [r];
-        }
-      });
-
-      // Update infos dengan error handling
-      setInfos((prevInfos) => {
-        try {
-          const newInfo = {
-            id: Date.now() + Math.random(),
-            date: new Date().toLocaleString(),
-            text: `Rental baru: ${r.nama} (${r.jenis}) senilai ${fmtCurrency(r.harga)}.`,
-            chats: []
-          };
-          
-          const newInfos = Array.isArray(prevInfos) ? [newInfo, ...prevInfos] : [newInfo];
-          console.log('New infos array:', newInfos);
-          return newInfos;
-        } catch (error) {
-          console.error('Error updating infos:', error);
-          return prevInfos || [];
-        }
-      });
+      // Add info log
+      try {
+        const infoText = `Rental baru: ${newRental.nama} (${newRental.jenis}) senilai ${fmtCurrency(Number(newRental.harga))}.`;
+        const newInfo = await addInfoToDB(infoText);
+        setInfos(prevInfos => [newInfo, ...prevInfos]);
+      } catch (error) {
+        console.error('Error adding info log:', error);
+      }
 
       console.log('Rental added successfully');
     } catch (error) {
       console.error('Error in addRental function:', error);
-      alert("Terjadi kesalahan saat menambah data. Silakan coba lagi.");
+      alert("Terjadi kesalahan saat menambah data: " + error.message);
     }
   }
 
-  function updateRental(id, patch) {
+  async function updateRental(id, patch) {
     try {
-      setRentals((list) => {
-        if (!Array.isArray(list)) return [];
-        return list.map((r) => {
-          if (r && r.id === id) {
-            return { ...r, ...patch };
-          }
-          return r;
-        });
-      });
+      await updateRentalInDB(id, patch);
+      
+      // Update local state
+      setRentals(prevRentals => 
+        prevRentals.map(r => 
+          r.id === id ? { ...r, ...patch } : r
+        )
+      );
     } catch (error) {
       console.error('Error updating rental:', error);
+      throw error;
     }
   }
 
-  function deleteRental(id) {
+  async function deleteRental(id) {
     try {
-      setRentals((list) => {
-        if (!Array.isArray(list)) return [];
-        return list.filter((r) => r && r.id !== id);
-      });
+      await deleteRentalFromDB(id);
+      
+      // Update local state
+      setRentals(prevRentals => 
+        prevRentals.filter(r => r.id !== id)
+      );
     } catch (error) {
       console.error('Error deleting rental:', error);
+      throw error;
     }
   }
 
-  function addInfo(text) {
+  async function addInfo(text) {
     try {
       if (!text || !text.trim()) return;
       
-      setInfos((prevInfos) => {
-        const newInfo = {
-          id: Date.now() + Math.random(),
-          date: new Date().toLocaleString(),
-          text: text.trim(),
-          chats: []
-        };
-        return Array.isArray(prevInfos) ? [newInfo, ...prevInfos] : [newInfo];
-      });
+      const newInfo = await addInfoToDB(text);
+      setInfos(prevInfos => [newInfo, ...prevInfos]);
     } catch (error) {
       console.error('Error adding info:', error);
+      alert('Gagal menambah info: ' + error.message);
     }
   }
 
-  function addChat(infoId, text) {
+  async function addChat(infoId, text) {
     try {
       if (!text || !text.trim()) return;
       
-      setInfos((arr) => {
-        if (!Array.isArray(arr)) return [];
-        
-        return arr.map((i) => {
-          if (i && i.id === infoId) {
-            const newChat = { id: Date.now() + Math.random(), text: text.trim() };
-            const newChats = Array.isArray(i.chats) ? [...i.chats, newChat] : [newChat];
-            return { ...i, chats: newChats };
-          }
-          return i;
-        });
-      });
+      const newChat = await addChatToDB(infoId, text);
+      
+      setInfos(prevInfos => 
+        prevInfos.map(info => 
+          info.id === infoId 
+            ? { ...info, chats: [...(info.chats || []), newChat] }
+            : info
+        )
+      );
     } catch (error) {
       console.error('Error adding chat:', error);
+      alert('Gagal menambah chat: ' + error.message);
     }
   }
 
@@ -975,6 +1150,17 @@ export default function App() {
         <span className="text-lg">{icon}</span>
         <span className="font-medium text-sm sm:text-base">{label}</span>
       </button>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-full bg-blue-50/60 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="text-gray-600">Memuat aplikasi...</div>
+        </div>
+      </div>
     );
   }
 
@@ -1136,11 +1322,9 @@ export default function App() {
         {page === "info" && (
           <TentangAwanku 
             isLoggedIn={isLoggedIn} 
-            katalog={Array.isArray(infos?.katalog) ? infos.katalog : []} 
-            onAddProduk={(p) => setInfos((prev) => ({ 
-              ...prev, 
-              katalog: Array.isArray(prev?.katalog) ? [...prev.katalog, p] : [p] 
-            }))} 
+            infos={Array.isArray(infos) ? infos : []} 
+            onAddInfo={addInfo}
+            onAddChat={addChat}
           />
         )}
 
@@ -1149,38 +1333,39 @@ export default function App() {
             <h1 className="text-xl sm:text-2xl font-bold">Admin Panel</h1>
             <Card>
                <AdminManager 
-        rentals={Array.isArray(rentals) ? rentals : []} 
-        onUpdate={updateRental} 
-        onDelete={deleteRental} 
-      />
-    </Card>
-  </div>
-)}
+                rentals={Array.isArray(rentals) ? rentals : []} 
+                onUpdate={updateRental} 
+                onDelete={deleteRental} 
+                isLoading={false}
+              />
+            </Card>
+          </div>
+        )}
 
-{page === 'login' && !isLoggedIn && (
-  <div className="max-w-md mx-auto mt-8 sm:mt-20">
-    <h1 className="text-xl sm:text-2xl font-bold mb-4">Login Admin</h1>
-    <Card>
-      <LoginForm onLogin={(user, pass) => {
-        if (user === "Bagas" && pass === "9087") {
-          setIsLoggedIn(true);
-          setPage("dashboard");
-        } else {
-          alert("Username atau password salah.");
-        }
-      }} />
-    </Card>
-  </div>
-)}
+        {page === 'login' && !isLoggedIn && (
+          <div className="max-w-md mx-auto mt-8 sm:mt-20">
+            <h1 className="text-xl sm:text-2xl font-bold mb-4">Login Admin</h1>
+            <Card>
+              <LoginForm onLogin={(user, pass) => {
+                if (user === "Bagas" && pass === "9087") {
+                  setIsLoggedIn(true);
+                  setPage("dashboard");
+                } else {
+                  alert("Username atau password salah.");
+                }
+              }} />
+            </Card>
+          </div>
+        )}
 
-{/* Halaman yang membutuhkan login tapi user belum login */}
-{((page === 'input' || page === 'admin' || page === 'finance') && !isLoggedIn) && (
-  <div className="text-center mt-16 sm:mt-20">
-    <h1 className="text-xl sm:text-2xl font-bold">Akses Ditolak</h1>
-    <p className="text-gray-600 mt-2 text-sm sm:text-base">Kamu harus login untuk mengakses halaman ini ya</p>
-    <button onClick={() => setPage('login')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">Login</button>
-  </div>
-)}
+        {/* Halaman yang membutuhkan login tapi user belum login */}
+        {((page === 'input' || page === 'admin' || page === 'finance') && !isLoggedIn) && (
+          <div className="text-center mt-16 sm:mt-20">
+            <h1 className="text-xl sm:text-2xl font-bold">Akses Ditolak</h1>
+            <p className="text-gray-600 mt-2 text-sm sm:text-base">Kamu harus login untuk mengakses halaman ini ya</p>
+            <button onClick={() => setPage('login')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">Login</button>
+          </div>
+        )}
       </main>
     </div>
   );
@@ -1189,7 +1374,34 @@ export default function App() {
 // ===================== PAGES & WIDGETS =====================
 
 // ===================== TENTANG AWANKU PAGE =====================
-function TentangAwanku({ isLoggedIn, katalog, onAddProduk }) {
+function TentangAwanku({ isLoggedIn, infos, onAddInfo, onAddChat }) {
+  const [newInfoText, setNewInfoText] = useState('');
+  const [chatTexts, setChatTexts] = useState({});
+
+  async function handleAddInfo(e) {
+    e.preventDefault();
+    if (!newInfoText.trim()) return;
+    
+    try {
+      await onAddInfo(newInfoText);
+      setNewInfoText('');
+    } catch (error) {
+      console.error('Error adding info:', error);
+    }
+  }
+
+  async function handleAddChat(infoId) {
+    const text = chatTexts[infoId];
+    if (!text?.trim()) return;
+    
+    try {
+      await onAddChat(infoId, text);
+      setChatTexts(prev => ({ ...prev, [infoId]: '' }));
+    } catch (error) {
+      console.error('Error adding chat:', error);
+    }
+  }
+
   return (
     <div className="bg-white min-h-screen py-10 px-4 sm:px-6 lg:px-8 space-y-10">
       <video
@@ -1249,6 +1461,82 @@ function TentangAwanku({ isLoggedIn, katalog, onAddProduk }) {
           </a>
         </div>
       </section>
+
+      {/* Info Section */}
+      {isLoggedIn && (
+        <section className="max-w-4xl mx-auto">
+          <Card>
+            <h3 className="text-lg font-semibold mb-4">Tambah Info</h3>
+            <form onSubmit={handleAddInfo} className="flex gap-2">
+              <input
+                type="text"
+                value={newInfoText}
+                onChange={(e) => setNewInfoText(e.target.value)}
+                placeholder="Tulis info baru..."
+                className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm"
+              >
+                Tambah
+              </button>
+            </form>
+          </Card>
+        </section>
+      )}
+
+      {/* Display Infos */}
+      <section className="max-w-4xl mx-auto space-y-4">
+        {infos.map((info) => (
+          <Card key={info.id}>
+            <div className="mb-2">
+              <div className="text-xs text-gray-500 mb-1">{info.date}</div>
+              <div className="text-sm">{info.text}</div>
+            </div>
+            
+            {/* Display chats */}
+            {info.chats && info.chats.length > 0 && (
+              <div className="mt-3 pl-4 border-l-2 border-gray-200">
+                {info.chats.map((chat) => (
+                  <div key={chat.id} className="text-xs text-gray-600 mb-1">
+                    • {chat.text}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Add chat form (admin only) */}
+            {isLoggedIn && (
+              <div className="mt-3 pt-3 border-t">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatTexts[info.id] || ''}
+                    onChange={(e) => setChatTexts(prev => ({ ...prev, [info.id]: e.target.value }))}
+                    placeholder="Tambah komentar..."
+                    className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                  />
+                  <button
+                    onClick={() => handleAddChat(info.id)}
+                    className="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700"
+                  >
+                    Kirim
+                  </button>
+                </div>
+              </div>
+            )}
+          </Card>
+        ))}
+        
+        {infos.length === 0 && (
+          <Card>
+            <div className="text-center py-8 text-gray-400">
+              Belum ada info yang ditambahkan
+            </div>
+          </Card>
+        )}
+      </section>
     </div>
   );
 }
@@ -1263,6 +1551,7 @@ function RentalForm({ onSubmit }) {
   const [metode, setMetode] = useState("Tunai");
   const [tanggalMulai, setTanggalMulai] = useState("");
   const [tanggalAkhir, setTanggalAkhir] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Auto-calculate durasi ketika tanggal berubah atau durasi dipilih "Sesuai Tanggal"
   const [calculatedDays, setCalculatedDays] = useState(0);
@@ -1328,7 +1617,7 @@ function RentalForm({ onSubmit }) {
     return durasiDays;
   }
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
     
     if (!nama.trim() || !jenis.trim() || !harga) {
@@ -1353,29 +1642,39 @@ function RentalForm({ onSubmit }) {
       tanggalAkhir: tanggalAkhir || null
     };
 
-    console.log('Submitting form data:', formData);
-    onSubmit(formData);
-    
-    // Reset form
-    setNama("");
-    setJenis("");
-    setGmail("");
-    setDurasiDays(7);
-    setHarga("");
-    setMetode("Tunai");
-    setTanggalMulai("");
-    setTanggalAkhir("");
-    setCalculatedDays(0);
-    setIsDurasiFromDate(false);
+    setIsSubmitting(true);
+    try {
+      console.log('Submitting form data:', formData);
+      await onSubmit(formData);
+      
+      // Reset form
+      setNama("");
+      setJenis("");
+      setGmail("");
+      setDurasiDays(7);
+      setHarga("");
+      setMetode("Tunai");
+      setTanggalMulai("");
+      setTanggalAkhir("");
+      setCalculatedDays(0);
+      setIsDurasiFromDate(false);
+      
+      alert('Data berhasil disimpan!');
+    } catch (error) {
+      console.error('Error submitting form:', error);
+      // Error sudah ditangani di addRental function
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <form onSubmit={submit} className="grid gap-4">
       <div className="grid md:grid-cols-2 gap-4">
-        <Input label="Nama Penyewa *" value={nama} onChange={setNama} required />
-        <Input label="Jenis Barang *" value={jenis} onChange={setJenis} required />
+        <Input label="Nama Penyewa *" value={nama} onChange={setNama} required disabled={isSubmitting} />
+        <Input label="Jenis Barang *" value={jenis} onChange={setJenis} required disabled={isSubmitting} />
       </div>
-      <Input label="Email (opsional)" value={gmail} onChange={setGmail} type="email" />
+      <Input label="Email (opsional)" value={gmail} onChange={setGmail} type="email" disabled={isSubmitting} />
       
       {/* Durasi dengan info tambahan */}
       <div className="grid md:grid-cols-3 gap-4">
@@ -1384,7 +1683,8 @@ function RentalForm({ onSubmit }) {
             label="Durasi *" 
             value={durasiDays} 
             onChange={handleDurasiChange} 
-            options={DURATIONS} 
+            options={DURATIONS}
+            disabled={isSubmitting}
           />
           {durasiDays === 0 && calculatedDays > 0 && (
             <div className="text-xs text-blue-600 mt-1">
@@ -1398,8 +1698,16 @@ function RentalForm({ onSubmit }) {
           )}
         </div>
         
-        <Input label="Harga Sewa *" value={harga} onChange={setHarga} type="number" min="0" required />
-        <SelectSimple label="Metode Pembayaran" value={metode} onChange={setMetode} options={["Tunai","Transfer"]} />
+        <Input label="Harga Sewa *" value={harga} onChange={setHarga} type="number" min="0" required disabled={isSubmitting} />
+        <div>
+          <SelectSimple 
+            label="Metode Pembayaran" 
+            value={metode} 
+            onChange={setMetode} 
+            options={["Tunai","Transfer"]}
+            disabled={isSubmitting}
+          />
+        </div>
       </div>
       
       {/* Tanggal dengan auto-calculation */}
@@ -1408,13 +1716,15 @@ function RentalForm({ onSubmit }) {
           label="Tanggal Mulai" 
           value={tanggalMulai} 
           onChange={handleTanggalMulaiChange} 
-          type="date" 
+          type="date"
+          disabled={isSubmitting}
         />
         <Input 
           label="Tanggal Akhir" 
           value={tanggalAkhir} 
           onChange={handleTanggalAkhirChange} 
-          type="date" 
+          type="date"
+          disabled={isSubmitting}
         />
       </div>
       
@@ -1434,17 +1744,26 @@ function RentalForm({ onSubmit }) {
       )}
       
       <div className="flex gap-3 flex-wrap">
-        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700">
-          Simpan Data
+        <button 
+          type="submit" 
+          disabled={isSubmitting}
+          className={`px-4 py-2 rounded-xl ${
+            isSubmitting 
+              ? 'bg-gray-400 cursor-not-allowed' 
+              : 'bg-blue-600 hover:bg-blue-700'
+          } text-white`}
+        >
+          {isSubmitting ? 'Menyimpan...' : 'Simpan Data'}
         </button>
         <button
           type="button"
+          disabled={isSubmitting}
           onClick={() => {
             setNama(""); setJenis(""); setGmail(""); setDurasiDays(7);
             setHarga(""); setMetode("Tunai"); setTanggalMulai(""); setTanggalAkhir("");
             setCalculatedDays(0); setIsDurasiFromDate(false);
           }}
-          className="px-4 py-2 bg-gray-100 rounded-xl hover:bg-gray-200"
+          className="px-4 py-2 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50"
         >
           Reset
         </button>

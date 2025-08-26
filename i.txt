@@ -1,6 +1,89 @@
-App.jsx?t=1756171643978:858 
- Uncaught ReferenceError: CountdownTable is not defined
-    at App (App.jsx?t=1756171643978:858:11)
-App	@	App.jsx?t=1756171643978:858
-<App>		
-(anonymous)	@	main.jsx:8
+-- Create rentals table
+CREATE TABLE rentals (
+  id BIGSERIAL PRIMARY KEY,
+  nama VARCHAR(255) NOT NULL,
+  jenis VARCHAR(255) NOT NULL,
+  gmail VARCHAR(255),
+  harga DECIMAL(15,2) DEFAULT 0,
+  metode VARCHAR(50) DEFAULT 'Tunai',
+  durasi_days INTEGER DEFAULT 7,
+  start_iso TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  status VARCHAR(50) DEFAULT 'Normal',
+  tanggal_mulai DATE,
+  tanggal_akhir DATE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create infos table
+CREATE TABLE infos (
+  id BIGSERIAL PRIMARY KEY,
+  date VARCHAR(255) NOT NULL,
+  text TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create chats table (for info comments/chats)
+CREATE TABLE chats (
+  id BIGSERIAL PRIMARY KEY,
+  info_id BIGINT REFERENCES infos(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Add indexes for better performance
+CREATE INDEX idx_rentals_status ON rentals(status);
+CREATE INDEX idx_rentals_start_iso ON rentals(start_iso);
+CREATE INDEX idx_rentals_metode ON rentals(metode);
+CREATE INDEX idx_infos_created_at ON infos(created_at);
+CREATE INDEX idx_chats_info_id ON chats(info_id);
+
+-- Create updated_at trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Add triggers for updated_at
+CREATE TRIGGER update_rentals_updated_at BEFORE UPDATE ON rentals
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_infos_updated_at BEFORE UPDATE ON infos
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_chats_updated_at BEFORE UPDATE ON chats
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE rentals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE infos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chats ENABLE ROW LEVEL SECURITY;
+
+-- Create policies (adjust based on your authentication needs)
+-- For now, allowing all operations - you should customize these policies
+
+-- Rentals policies
+CREATE POLICY "Allow all operations on rentals" ON rentals
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- Infos policies  
+CREATE POLICY "Allow all operations on infos" ON infos
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- Chats policies
+CREATE POLICY "Allow all operations on chats" ON chats
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- Insert some sample data (optional)
+INSERT INTO rentals (nama, jenis, gmail, harga, metode, durasi_days, status) VALUES 
+('John Doe', 'Netflix Premium', 'john@example.com', 50000, 'Transfer', 30, 'Normal'),
+('Jane Smith', 'Spotify Premium', 'jane@example.com', 25000, 'Tunai', 14, 'Normal');
+
+INSERT INTO infos (date, text) VALUES 
+('2024-01-01 10:00:00', 'Selamat datang di Awanku Digital!'),
+('2024-01-02 15:30:00', 'Promo spesial untuk pelanggan setia.');
