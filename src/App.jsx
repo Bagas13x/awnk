@@ -1012,22 +1012,22 @@ export default function App() {
 
         <div className="mt-2 flex flex-col gap-2">
           <SidebarLink id="dashboard" label="Dashboard" icon="☁" />
-          <SidebarLink id="countdown" label="Costumer" icon="👥" />
-          <SidebarLink id="finance" label="Keuangan" icon="💰" adminOnly />
-          <SidebarLink id="input" label="Input Data" icon="➕" adminOnly />
-          <SidebarLink id="info" label="Tentang" icon="ℹ️"/>
-          <SidebarLink id="admin" label="Admin" icon="⚙️" adminOnly />
+          <SidebarLink id="countdown" label="Costumer" icon="" />
+          <SidebarLink id="finance" label="Keuangan" icon="" adminOnly />
+          <SidebarLink id="input" label="Input Data" icon="" adminOnly />
+          <SidebarLink id="info" label="Tentang" icon="ℹ"/>
+          <SidebarLink id="admin" label="Admin" icon="" adminOnly />
         </div>
 
         <div className="mt-auto">
           {isLoggedIn ? (
             <button onClick={handleLogout} className="w-full text-left px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-100 flex items-center gap-3">
-              <span className="text-lg">🚪</span>
+              <span className="text-lg"></span>
               <span className="font-medium text-sm sm:text-base">Logout</span>
             </button>
           ) : (
             <button onClick={() => { setPage('login'); setIsSidebarOpen(false); }} className="w-full text-left px-4 py-2 rounded-xl text-gray-700 hover:bg-gray-100 flex items-center gap-3">
-              <span className="text-lg">🔑</span>
+              <span className="text-lg"></span>
               <span className="font-medium text-sm sm:text-base">Login</span>
             </button>
           )}
