@@ -610,7 +610,7 @@ function LoginForm({ onLogin }) {
     <div className="space-y-4">
       <div className="text-center mb-6">
         <div className="text-lg font-semibold text-gray-800">Login Admin</div>
-        <div className="text-sm text-gray-600 mt-1">Masuk untuk akses fitur admin</div>
+        {/* <div className="text-sm text-gray-600 mt-1">Masuk admin untuk akses Awanku :c</div> */}
       </div>
       
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -648,12 +648,12 @@ function LoginForm({ onLogin }) {
       
       <div className="text-center">
         <div className="text-xs text-gray-500">
-          Hubungi admin jika lupa password
+          Khusus Anggota Awanku
         </div>
       </div>
     </div>
   );
-}f
+}
 
 // ===================== FORM INPUTS =====================
 function Input({ label, value, onChange, type = "text", required = false, min, max, placeholder, ...rest }) {
@@ -1015,7 +1015,7 @@ export default function App() {
           <SidebarLink id="countdown" label="Costumer" icon="" />
           <SidebarLink id="finance" label="Keuangan" icon="" adminOnly />
           <SidebarLink id="input" label="Input Data" icon="" adminOnly />
-          <SidebarLink id="info" label="Tentang" icon="ℹ"/>
+          <SidebarLink id="info" label="Tentang" icon=""/>
           <SidebarLink id="admin" label="Admin" icon="" adminOnly />
         </div>
 
